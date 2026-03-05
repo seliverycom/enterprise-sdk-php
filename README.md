@@ -2,11 +2,11 @@
 
 Official PHP SDK for the Selivery Enterprise API.
 
-## Quick Start
+## Installation
 
-- Install deps: `composer install`
-- Run tests: `composer test`
-- Lint + static analysis: `composer check`
+- Require via Composer: `composer require selivery/enterprise-sdk-php`
+- Requires PHP ^8.2 with `ext-openssl` and `ext-json`.
+
 
 ## Usage
 
