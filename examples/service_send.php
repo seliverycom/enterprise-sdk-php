@@ -11,7 +11,7 @@ $secret = getenv('SELIVERY_SECRET') ?: '';
 $client = new EnterpriseClient(new Config(secret: $secret));
 
 $response = $client->service->send(
-    phone: '+15550001',
+    phone: '+12025550123',
     idTemplate: 1,
     // Vector is generated automatically and used for encryption and request body
     // Secrets input: values is a single string; SDK will encrypt and chunk into an array

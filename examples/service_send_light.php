@@ -11,7 +11,7 @@ $secret = getenv('SELIVERY_SECRET') ?: '';
 $client = new EnterpriseClient(new Config(secret: $secret));
 
 $response = $client->service->sendLight(
-    phone: '+15550001',
+    phone: '+12025550123',
     idTemplate: 1,
     // For send-light, values can be a string per schema and are forwarded as-is
     secrets: [

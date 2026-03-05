@@ -28,7 +28,7 @@ final class ServiceClientSendSecretsTest extends TestCase
         self::assertIsArray($details);
         $pubPem = $details['key'];
 
-        $phone = '+15550001';
+        $phone = '+12025550123';
         $uuid = 'abc-123';
         $history = [];
         $historyMiddleware = Middleware::history($history);

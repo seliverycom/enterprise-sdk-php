@@ -29,7 +29,7 @@ $client = new EnterpriseClient(new Config(secret: getenv('SELIVERY_SECRET') ?: '
 
 /** @var Selivery\Enterprise\Models\SendResult $response */
 $response = $client->service->send(
-    phone: '+15550001',
+    phone: '+12025550123',
     idTemplate: 1,
     // Vector is generated automatically and used for encryption and request body
     secrets: [
@@ -51,7 +51,7 @@ Difference from send:
 ```php
 /** @var Selivery\Enterprise\Models\SendResult $response */
 $response = $client->service->sendLight(
-    phone: '+15550001',
+    phone: '+12025550123',
     idTemplate: 1,
     secrets: [
         ['key' => 'code', 'values' => '123456'],
@@ -92,7 +92,7 @@ $client = new EnterpriseClient(
 
 ```php
 /** @var Selivery\Enterprise\Models\PublicKeys $keys */
-$keys = $client->service->getPublicKeys(['+15550001', '+15550002']);
+$keys = $client->service->getPublicKeys(['+12025550123', '+12025550124']);
 ```
 
 ## Examples

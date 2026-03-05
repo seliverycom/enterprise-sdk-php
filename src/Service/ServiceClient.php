@@ -90,7 +90,7 @@ final class ServiceClient
 
     /**
      * Resolve the first available key for the phone.
-     * Expected API shape: { phones: { "+1555": [ { uuid, public_key, ... } ] } }
+     * Expected API shape: { phones: { "+12025550123": [ { uuid, public_key, ... } ] } }
      * @return array{uuid:string,public_key:string}
      */
     private function resolveKeyForPhone(string $phone): array
