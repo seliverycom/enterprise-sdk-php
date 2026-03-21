@@ -15,12 +15,12 @@ final class TokenProvider
     public function __construct(
         private readonly TokenCache $cache,
         private readonly TokenRefresher $refresher,
-        private readonly ?string $fallbackSecret = null,
         private readonly ?\Selivery\Enterprise\Auth\AuthClient $authClient = null,
-    ) {}
+    ) {
+    }
 
     /**
-     * Returns a usable access token if available. Falls back to provided secret when cache is unavailable.
+     * Returns a usable access token if available.
      */
     public function getToken(): ?string
     {
@@ -41,7 +41,7 @@ final class TokenProvider
                 $this->cache->save($newTokens);
                 return $newTokens->accessToken;
             } catch (Throwable) {
-                // Clear cached entry to avoid loops and fall back
+                // Clear cached entry to avoid loops and fall back to generateToken.
                 $this->cache->invalidate();
             }
         }
@@ -50,15 +50,13 @@ final class TokenProvider
         if ($this->authClient !== null) {
             try {
                 $tokens = $this->authClient->generateToken();
-                // Ensure cache is updated even if AuthClient didn't save
                 $this->cache->save($tokens);
                 return $tokens->accessToken;
             } catch (Throwable) {
-                // fall through to fallback secret
+                return null;
             }
         }
 
-        // Fallback to provided secret (may be null/empty)
-        return $this->fallbackSecret ?: null;
+        return null;
     }
 }

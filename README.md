@@ -22,13 +22,12 @@ Official PHP SDK for the Selivery Enterprise API.
 No sender parameter is needed (it is derived from the template on the service).
 
 ```php
-use Selivery\Enterprise\Config;
 use Selivery\Enterprise\EnterpriseClient;
 
-$client = new EnterpriseClient(new Config(secret: getenv('SELIVERY_SECRET') ?: ''));
+$client = new EnterpriseClient(getenv('SELIVERY_SECRET') ?: '');
 
 /** @var Selivery\Enterprise\Models\SendResult $response */
-$response = $client->service->send(
+$response = $client->send(
     phone: '+12025550123',
     idTemplate: 1,
     // Vector is generated automatically and used for encryption and request body
@@ -50,7 +49,7 @@ Difference from send:
 
 ```php
 /** @var Selivery\Enterprise\Models\SendResult $response */
-$response = $client->service->sendLight(
+$response = $client->sendLight(
     phone: '+12025550123',
     idTemplate: 1,
     secrets: [
@@ -64,7 +63,6 @@ $response = $client->service->sendLight(
 Inject any PSR-16 cache to enable automatic caching and refresh of OAuth tokens.
 
 ```php
-use Selivery\Enterprise\Config;
 use Selivery\Enterprise\EnterpriseClient;
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
 use Symfony\Component\Cache\Psr16Cache;
@@ -73,11 +71,13 @@ $pool = new FilesystemAdapter(namespace: 'selivery', defaultLifetime: 0);
 $psr16 = new Psr16Cache($pool);
 
 // Options (optional):
+// - base_url: override API base URL
+// - timeout: request timeout in seconds
 // - cache_key: override default key (default: selivery_enterprise_sdk_tokens:{sha1(baseUrl)})
 // - token_safety_window: seconds before expiry to refresh (default: 60)
 
 $client = new EnterpriseClient(
-    new Config(secret: getenv('SELIVERY_SECRET') ?: ''),
+    secret: getenv('SELIVERY_SECRET') ?: '',
     cache: $psr16,
     options: [
         'token_safety_window' => 60,
@@ -85,14 +85,8 @@ $client = new EnterpriseClient(
     ]
 );
 
-// Service requests will reuse cached token and auto-refresh when near expiry.
-```
-
-### Service: get public keys
-
-```php
-/** @var Selivery\Enterprise\Models\PublicKeys $keys */
-$keys = $client->service->getPublicKeys(['+12025550123', '+12025550124']);
+// The SDK generates tokens automatically on the first request,
+// then reuses and refreshes them through the cache.
 ```
 
 ## Examples
@@ -102,7 +96,10 @@ $keys = $client->service->getPublicKeys(['+12025550123', '+12025550124']);
 
 ## Notes
 
-- Service API requests require `Authorization: Bearer {access_token}`.
+- `EnterpriseClient` is the only public entry point. Call `send(...)` or `sendLight(...)` on it directly.
+- The SDK uses your secret only for `generate-token`.
+- Service requests use the generated `access_token` automatically.
+- If a cache is provided, the SDK stores both access and refresh tokens and refreshes the access token when needed.
 - POST endpoints accept JSON bodies; include `Content-Type: application/json`.
 - The `sender` field has been removed from SDK methods and requests; it is derived from the template server‑side.
 - Token cache key default: `selivery_enterprise_sdk_tokens:{sha1(baseUrl)}`. Avoid putting secrets in cache keys.

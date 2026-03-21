@@ -12,8 +12,11 @@ final class AuthClient
 {
     private ?TokenCache $tokenCache = null;
 
-    public function __construct(private readonly HttpClient $http, ?TokenCache $tokenCache = null)
-    {
+    public function __construct(
+        private readonly HttpClient $generateTokenHttp,
+        private readonly HttpClient $authHttp,
+        ?TokenCache $tokenCache = null
+    ) {
         $this->tokenCache = $tokenCache;
     }
 
@@ -25,7 +28,7 @@ final class AuthClient
 
     public function generateToken(): AuthTokens
     {
-        $data = $this->http->postJson('/v1/auth/generate-token');
+        $data = $this->generateTokenHttp->postJson('/v1/auth/generate-token');
         $tokens = AuthTokens::fromArray($data);
         if ($this->tokenCache) {
             $this->tokenCache->save($tokens);
@@ -43,7 +46,7 @@ final class AuthClient
         if ($ttl !== null) {
             $body['ttl'] = $ttl;
         }
-        $data = $this->http->postJson('/v1/auth/refresh-token', $body);
+        $data = $this->authHttp->postJson('/v1/auth/refresh-token', $body);
         $tokens = AuthTokens::fromArray($data);
         if ($this->tokenCache) {
             $this->tokenCache->save($tokens);
@@ -53,7 +56,7 @@ final class AuthClient
 
     public function checkToken(string $token): TokenCheck
     {
-        $data = $this->http->postJson('/v1/auth/check-token', ['token' => $token]);
+        $data = $this->authHttp->postJson('/v1/auth/check-token', ['token' => $token]);
         return TokenCheck::fromArray($data);
     }
 }

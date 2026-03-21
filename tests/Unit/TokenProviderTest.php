@@ -4,10 +4,17 @@ declare(strict_types=1);
 
 namespace Selivery\Enterprise\Tests\Unit;
 
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Selivery\Enterprise\Auth\AuthClient;
 use Selivery\Enterprise\Auth\TokenCache;
 use Selivery\Enterprise\Auth\TokenProvider;
 use Selivery\Enterprise\Auth\TokenRefresher;
+use Selivery\Enterprise\Config;
+use Selivery\Enterprise\Http\HttpClient;
 use Selivery\Enterprise\Models\AuthTokens;
 
 final class TokenProviderTest extends TestCase
@@ -18,14 +25,14 @@ final class TokenProviderTest extends TestCase
         $cache = new TokenCache($fake, 'k', 60);
         $cache->save(new AuthTokens('ACCESS', 'REFRESH', 300));
 
-        $refresher = new class implements TokenRefresher {
+        $refresher = new class () implements TokenRefresher {
             public function refresh(string $accessToken, string $refreshToken): AuthTokens
             {
                 throw new \RuntimeException('should not refresh');
             }
         };
 
-        $provider = new TokenProvider($cache, $refresher, null);
+        $provider = new TokenProvider($cache, $refresher);
         self::assertSame('ACCESS', $provider->getToken());
     }
 
@@ -36,16 +43,45 @@ final class TokenProviderTest extends TestCase
         // Force near/immediate expiry: ttl=0
         $cache->save(new AuthTokens('OLD', 'R', 0));
 
-        $refresher = new class implements TokenRefresher {
+        $refresher = new class () implements TokenRefresher {
             public function refresh(string $accessToken, string $refreshToken): AuthTokens
             {
                 return new AuthTokens('NEW', 'R2', 3600);
             }
         };
 
-        $provider = new TokenProvider($cache, $refresher, null);
+        $provider = new TokenProvider($cache, $refresher);
         self::assertSame('NEW', $provider->getToken());
         // Cached token should now be valid and equal to NEW
+        self::assertSame('NEW', $cache->getAccessTokenIfValid());
+    }
+
+    public function test_generates_new_token_when_cache_is_empty(): void
+    {
+        $fake = new FakeArrayCache();
+        $cache = new TokenCache($fake, 'k', 60);
+
+        $refresher = new class () implements TokenRefresher {
+            public function refresh(string $accessToken, string $refreshToken): AuthTokens
+            {
+                throw new \RuntimeException('should not refresh');
+            }
+        };
+
+        $mock = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'access_token' => 'NEW',
+                'refresh_token' => 'R2',
+                'session_ttl' => 3600,
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+        $guzzle = new GuzzleClient(['handler' => HandlerStack::create($mock), 'base_uri' => 'https://example.test/']);
+        $generateTokenHttp = new HttpClient(new Config(baseUrl: 'https://example.test', secret: 'SECRET', timeout: 1.0), null, $guzzle);
+        $authHttp = new HttpClient(new Config(baseUrl: 'https://example.test', secret: null, timeout: 1.0), null, $guzzle);
+        $auth = new AuthClient($generateTokenHttp, $authHttp, $cache);
+
+        $provider = new TokenProvider($cache, $refresher, $auth);
+        self::assertSame('NEW', $provider->getToken());
         self::assertSame('NEW', $cache->getAccessTokenIfValid());
     }
 
@@ -55,15 +91,15 @@ final class TokenProviderTest extends TestCase
         $fake->throwOnGet = true; // simulate cache get failure
         $cache = new TokenCache($fake, 'k', 60);
 
-        $refresher = new class implements TokenRefresher {
+        $refresher = new class () implements TokenRefresher {
             public function refresh(string $accessToken, string $refreshToken): AuthTokens
             {
                 return new AuthTokens('NEW', 'R2', 3600);
             }
         };
 
-        $provider = new TokenProvider($cache, $refresher, 'FALLBACK');
-        self::assertSame('FALLBACK', $provider->getToken());
+        $provider = new TokenProvider($cache, $refresher);
+        self::assertNull($provider->getToken());
 
         // Now test set exception path: allow get, but throw on set
         $fake = new FakeArrayCache();
@@ -74,7 +110,7 @@ final class TokenProviderTest extends TestCase
         ]);
         $fake->throwOnSet = true;
         $cache = new TokenCache($fake, 'k', 60);
-        $provider = new TokenProvider($cache, $refresher, null);
+        $provider = new TokenProvider($cache, $refresher);
         // Should still return NEW even if saving to cache fails
         self::assertSame('NEW', $provider->getToken());
     }

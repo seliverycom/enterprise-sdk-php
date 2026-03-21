@@ -26,12 +26,13 @@ final class AuthClientCacheTest extends TestCase
             ], JSON_THROW_ON_ERROR)),
         ]);
         $client = new GuzzleClient(['handler' => HandlerStack::create($mock), 'base_uri' => 'https://example.test/']);
-        $http = new HttpClient(new Config(baseUrl: 'https://example.test', secret: null, timeout: 1.0), null, $client);
+        $generateTokenHttp = new HttpClient(new Config(baseUrl: 'https://example.test', secret: 'SECRET', timeout: 1.0), null, $client);
+        $authHttp = new HttpClient(new Config(baseUrl: 'https://example.test', secret: null, timeout: 1.0), null, $client);
 
         $fake = new FakeArrayCache();
         $cache = new TokenCache($fake, 'k', 60);
 
-        $auth = new AuthClient($http, $cache);
+        $auth = new AuthClient($generateTokenHttp, $authHttp, $cache);
         $tokens = $auth->generateToken();
 
         self::assertSame('AAA', $tokens->accessToken);

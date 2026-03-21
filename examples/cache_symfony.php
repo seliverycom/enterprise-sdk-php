@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Selivery\Enterprise\Config;
 use Selivery\Enterprise\EnterpriseClient;
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
 use Symfony\Component\Cache\Psr16Cache;
@@ -15,7 +14,7 @@ $pool = new FilesystemAdapter(namespace: 'selivery', defaultLifetime: 0);
 $psr16 = new Psr16Cache($pool);
 
 $client = new EnterpriseClient(
-    new Config(secret: getenv('SELIVERY_SECRET') ?: ''),
+    secret: getenv('SELIVERY_SECRET') ?: '',
     cache: $psr16,
     options: [
         'token_safety_window' => 60,
@@ -23,9 +22,6 @@ $client = new EnterpriseClient(
     ]
 );
 
-// First call stores tokens in cache
-$tokens = $client->auth->generateToken();
-echo 'Access token: ' . $tokens->accessToken . PHP_EOL;
-
-// Subsequent service calls reuse/refresh cached token automatically
-// $client->service->send(...);
+// The first service call stores tokens in cache automatically.
+// Subsequent service calls reuse and refresh them automatically.
+// $client->send(...);

@@ -10,29 +10,38 @@ use Selivery\Enterprise\Auth\AuthTokenRefresher;
 use Selivery\Enterprise\Auth\TokenCache;
 use Selivery\Enterprise\Auth\TokenProvider;
 use Selivery\Enterprise\Http\HttpClient;
+use Selivery\Enterprise\Models\SendResult;
 use Selivery\Enterprise\Service\ServiceClient;
 
 final class EnterpriseClient
 {
-    public readonly AuthClient $auth;
-    public readonly ServiceClient $service;
+    private ServiceClient $service;
 
-    public function __construct(Config $config, ?CacheInterface $cache = null, array $options = [])
+    public function __construct(string $secret, ?CacheInterface $cache = null, array $options = [])
     {
-        // Configure token cache & options
+        $baseUrl = (string) ($options['base_url'] ?? 'https://enterprise-api.selivery.com');
+        $timeout = (float) ($options['timeout'] ?? 10.0);
         $safetyWindow = (int) ($options['token_safety_window'] ?? 60);
-        $defaultKey = 'selivery_enterprise_sdk_tokens:' . sha1($config->baseUrl);
+        $defaultKey = 'selivery_enterprise_sdk_tokens:' . sha1($baseUrl);
         $cacheKey = (string) ($options['cache_key'] ?? $defaultKey);
         $tokenCache = new TokenCache($cache, $cacheKey, $safetyWindow);
 
-        // Auth client; if your API requires Authorization on auth endpoints,
-        // provide secret in Config and it will be sent.
-        $authHttp = new HttpClient(new Config(baseUrl: $config->baseUrl, secret: $config->secret, timeout: $config->timeout));
-        $this->auth = new AuthClient($authHttp, $tokenCache);
+        $generateTokenHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: $secret, timeout: $timeout));
+        $authHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout));
+        $auth = new AuthClient($generateTokenHttp, $authHttp, $tokenCache);
 
-        // Service client with dynamic token provider
-        $provider = new TokenProvider($tokenCache, new AuthTokenRefresher($this->auth), $config->secret, $this->auth);
-        $httpWithAuth = new HttpClient($config, [$provider, 'getToken']);
+        $provider = new TokenProvider($tokenCache, new AuthTokenRefresher($auth), $auth);
+        $httpWithAuth = new HttpClient(new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout), [$provider, 'getToken']);
         $this->service = new ServiceClient($httpWithAuth);
+    }
+
+    public function send(string $phone, int $idTemplate, array $secrets = []): SendResult
+    {
+        return $this->service->send($phone, $idTemplate, $secrets);
+    }
+
+    public function sendLight(string $phone, int $idTemplate, array $secrets = []): SendResult
+    {
+        return $this->service->sendLight($phone, $idTemplate, $secrets);
     }
 }

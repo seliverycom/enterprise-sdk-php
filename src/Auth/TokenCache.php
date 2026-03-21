@@ -41,12 +41,9 @@ final class TokenCache
             'expires_at' => $expiresAt,
         ];
 
-        // TTL should consider safety window, never negative
-        $ttl = max(0, $expiresAt - $now - $this->safetyWindowSeconds);
-
         try {
-            // PSR-16 accepts TTL in seconds (int|DateInterval). We use int seconds.
-            $this->cache->set($this->cacheKey, $bundle, $ttl);
+            // Keep the full token bundle available for refresh until we explicitly rotate or invalidate it.
+            $this->cache->set($this->cacheKey, $bundle);
         } catch (Throwable) {
             // Cache failures must not break requests.
         }
