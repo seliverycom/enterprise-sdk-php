@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Selivery\Enterprise;
 
+use GuzzleHttp\Client as GuzzleClient;
 use Psr\SimpleCache\CacheInterface;
 use Selivery\Enterprise\Auth\AuthClient;
 use Selivery\Enterprise\Auth\AuthTokenRefresher;
@@ -17,6 +18,7 @@ final class EnterpriseClient
 {
     private ServiceClient $service;
 
+    /** @param array{base_url?:string,timeout?:float,token_safety_window?:int,cache_key?:string,http_client?:GuzzleClient} $options */
     public function __construct(string $secret, ?CacheInterface $cache = null, array $options = [])
     {
         $baseUrl = (string) ($options['base_url'] ?? 'https://enterprise-api.selivery.com');
@@ -25,21 +27,29 @@ final class EnterpriseClient
         $defaultKey = 'selivery_enterprise_sdk_tokens:' . sha1($baseUrl);
         $cacheKey = (string) ($options['cache_key'] ?? $defaultKey);
         $tokenCache = new TokenCache($cache, $cacheKey, $safetyWindow);
+        $httpClient = $options['http_client'] ?? null;
 
-        $generateTokenHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: $secret, timeout: $timeout));
-        $authHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout));
+        $generateTokenHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: $secret, timeout: $timeout), client: $httpClient);
+        $authHttp = new HttpClient(new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout), client: $httpClient);
         $auth = new AuthClient($generateTokenHttp, $authHttp, $tokenCache);
 
         $provider = new TokenProvider($tokenCache, new AuthTokenRefresher($auth), $auth);
-        $httpWithAuth = new HttpClient(new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout), [$provider, 'getToken']);
+        $httpWithAuth = new HttpClient(
+            new Config(baseUrl: $baseUrl, secret: null, timeout: $timeout),
+            [$provider, 'getToken'],
+            $httpClient,
+            $provider
+        );
         $this->service = new ServiceClient($httpWithAuth);
     }
 
+    /** @param array{placeholder:string,values:string}[] $secrets */
     public function send(string $phone, int $idTemplate, array $secrets = []): SendResult
     {
         return $this->service->send($phone, $idTemplate, $secrets);
     }
 
+    /** @param array{key:string,values:string}[] $secrets */
     public function sendLight(string $phone, int $idTemplate, array $secrets = []): SendResult
     {
         return $this->service->sendLight($phone, $idTemplate, $secrets);

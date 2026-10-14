@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Selivery\Enterprise\Auth;
 
 use Selivery\Enterprise\Http\HttpClient;
+use Selivery\Enterprise\Exceptions\ApiException;
 use Selivery\Enterprise\Models\AuthTokens;
 use Selivery\Enterprise\Models\TokenCheck;
 
@@ -29,7 +30,7 @@ final class AuthClient
     public function generateToken(): AuthTokens
     {
         $data = $this->generateTokenHttp->postJson('/v1/auth/generate-token');
-        $tokens = AuthTokens::fromArray($data);
+        $tokens = $this->parseTokens($data, '/v1/auth/generate-token');
         if ($this->tokenCache) {
             $this->tokenCache->save($tokens);
         }
@@ -47,7 +48,7 @@ final class AuthClient
             $body['ttl'] = $ttl;
         }
         $data = $this->authHttp->postJson('/v1/auth/refresh-token', $body);
-        $tokens = AuthTokens::fromArray($data);
+        $tokens = $this->parseTokens($data, '/v1/auth/refresh-token');
         if ($this->tokenCache) {
             $this->tokenCache->save($tokens);
         }
@@ -58,5 +59,15 @@ final class AuthClient
     {
         $data = $this->authHttp->postJson('/v1/auth/check-token', ['token' => $token]);
         return TokenCheck::fromArray($data);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function parseTokens(array $data, string $path): AuthTokens
+    {
+        try {
+            return AuthTokens::fromArray($data);
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException('Invalid authentication response from POST ' . $path . ': ' . $e->getMessage(), previous: $e);
+        }
     }
 }

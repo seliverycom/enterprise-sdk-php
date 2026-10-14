@@ -75,6 +75,8 @@ $psr16 = new Psr16Cache($pool);
 // - timeout: request timeout in seconds
 // - cache_key: override default key (default: selivery_enterprise_sdk_tokens:{sha1(baseUrl)})
 // - token_safety_window: seconds before expiry to refresh (default: 60)
+// - http_client: optional Guzzle client shared by auth and service requests
+//   (configure its base_uri and timeout when injecting a client)
 
 $client = new EnterpriseClient(
     secret: getenv('SELIVERY_SECRET') ?: '',
@@ -89,6 +91,30 @@ $client = new EnterpriseClient(
 // then reuses and refreshes them through the cache.
 ```
 
+The SDK proactively refreshes tokens when `now >= expires_at - token_safety_window`.
+If refresh fails or returns unusable credentials, it invalidates the stale bundle
+and generates new tokens using your enterprise secret.
+
+An access token can be revoked before its recorded expiry. When a service request
+using an SDK-managed token receives HTTP 401, the SDK rejects that exact token,
+refreshes it (or generates tokens if no usable refresh token is available), and
+retries the original HTTP request **once**. A different valid token already stored
+by another request is reused. A second 401 is propagated as `ApiException` and its
+rejected token is removed from reuse. Other HTTP errors and transport failures do
+not trigger this recovery, and auth endpoints are never retried by this mechanism.
+
+Retries preserve the request body, query, and caller headers. Retrying `/v1/send`
+does not repeat public-key lookup, vector generation, or encryption.
+
+If authentication cannot produce a usable access token, the authentication failure
+is propagated before a service request is sent. HTTP auth failures retain their
+endpoint, status, and underlying exception; missing or empty `access_token` values
+produce a descriptive validation error. Cache failures remain non-fatal: freshly
+obtained tokens can still authenticate the current request. Without a working
+shared cache, tokens and rejections are retained only within the client instance.
+PSR-16 offers no atomic compare-and-delete, so this is not a cross-process lock;
+simultaneous token rotations can still race.
+
 ## Examples
 
 - Send message: `SELIVERY_SECRET=your-secret php examples/service_send.php`
@@ -99,7 +125,7 @@ $client = new EnterpriseClient(
 - `EnterpriseClient` is the only public entry point. Call `send(...)` or `sendLight(...)` on it directly.
 - The SDK uses your secret only for `generate-token`.
 - Service requests use the generated `access_token` automatically.
-- If a cache is provided, the SDK stores both access and refresh tokens and refreshes the access token when needed.
+- The SDK retains tokens in the client and, if provided, the PSR-16 cache; it refreshes near expiry and recovers once after an authenticated service 401.
 - POST endpoints accept JSON bodies; include `Content-Type: application/json`.
 - The `sender` field has been removed from SDK methods and requests; it is derived from the template server‑side.
 - Token cache key default: `selivery_enterprise_sdk_tokens:{sha1(baseUrl)}`. Avoid putting secrets in cache keys.

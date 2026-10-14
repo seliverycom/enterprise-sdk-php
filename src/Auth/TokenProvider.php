@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Selivery\Enterprise\Auth;
 
-use Selivery\Enterprise\Models\AuthTokens;
 use Throwable;
 
 /**
@@ -30,31 +29,70 @@ final class TokenProvider
             return $token;
         }
 
-        // Otherwise, try to refresh if we have a cached bundle with refresh token
+        return $this->renew($this->cache->get());
+    }
+
+    public function recoverToken(string $rejectedToken): string
+    {
+        // Read refresh credentials before removing the rejected bundle.
         $bundle = $this->cache->get();
+        $this->rejectToken($rejectedToken);
+        // A concurrent rotation may have completed while rejection was recorded.
+        $current = $this->cache->get();
+        if ($current !== null) {
+            $bundle = $current;
+        }
+
+        if ($bundle !== null && $bundle['access_token'] !== $rejectedToken
+            && time() < $bundle['expires_at'] - $this->cache->getSafetyWindowSeconds()) {
+            return $bundle['access_token'];
+        }
+
+        return $this->renew($bundle) ?? throw new \RuntimeException('Unable to obtain a usable access token.');
+    }
+
+    public function rejectToken(string $rejectedToken): void
+    {
+        $this->cache->rejectAccessToken($rejectedToken);
+    }
+
+    /** @param array{access_token:string,refresh_token:string,expires_at:int}|null $bundle */
+    private function renew(?array $bundle): ?string
+    {
         $refreshToken = $bundle['refresh_token'] ?? '';
         $accessToken = $bundle['access_token'] ?? '';
+        $refreshFailure = null;
 
-        if ($refreshToken !== '') {
+        if (trim($refreshToken) !== '') {
             try {
                 $newTokens = $this->refresher->refresh($accessToken, $refreshToken);
+                if ($this->cache->isRejected($newTokens->accessToken)) {
+                    throw new \RuntimeException('Token refresh returned a rejected access token.');
+                }
                 $this->cache->save($newTokens);
                 return $newTokens->accessToken;
-            } catch (Throwable) {
-                // Clear cached entry to avoid loops and fall back to generateToken.
-                $this->cache->invalidate();
+            } catch (Throwable $e) {
+                $refreshFailure = $e;
+                $this->rejectToken($accessToken);
+                $newer = $this->cache->getAccessTokenIfValid();
+                if ($newer !== null) {
+                    return $newer;
+                }
             }
         }
 
         // Try to generate fresh tokens when no valid/refreshable token is present
         if ($this->authClient !== null) {
-            try {
-                $tokens = $this->authClient->generateToken();
-                $this->cache->save($tokens);
-                return $tokens->accessToken;
-            } catch (Throwable) {
-                return null;
+            $tokens = $this->authClient->generateToken();
+            if ($this->cache->isRejected($tokens->accessToken)) {
+                throw new \RuntimeException('Token generation returned a rejected access token.');
             }
+            $this->cache->save($tokens);
+            return $tokens->accessToken;
+        }
+
+        if ($refreshFailure !== null) {
+            throw $refreshFailure;
         }
 
         return null;
